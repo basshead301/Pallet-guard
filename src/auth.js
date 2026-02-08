@@ -50,14 +50,21 @@ async function getApexToken() {
     console.log('[AUTH] Submitting login form...');
     await page.click('button[type="submit"], input[type="submit"]');
     
-    // Wait for redirect and check for Token cookie
-    await page.waitForTimeout(3000);
+    // Poll for Token cookie up to 30 seconds
+    let tokenCookie = null;
+    const maxWait = 30000;
+    const pollInterval = 1000;
+    const start = Date.now();
     
-    const cookies = await context.cookies();
-    const tokenCookie = cookies.find(c => c.name === 'Token' && c.domain.includes('capstonelogistics.com'));
+    while (Date.now() - start < maxWait) {
+      const cookies = await context.cookies();
+      tokenCookie = cookies.find(c => c.name === 'Token' && c.domain.includes('capstonelogistics.com'));
+      if (tokenCookie && tokenCookie.value) break;
+      await page.waitForTimeout(pollInterval);
+    }
     
     if (!tokenCookie || !tokenCookie.value) {
-      throw new Error('Apex Token cookie not found - login may have failed');
+      throw new Error('Apex Token cookie not found after 30s - login may have failed');
     }
 
     console.log(`[AUTH] ✓ Apex Token acquired (${tokenCookie.value.substring(0, 20)}...)`);
