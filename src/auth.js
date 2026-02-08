@@ -127,12 +127,12 @@ async function getLoadEntryToken() {
 async function handleMicrosoftLogin(page) {
   try {
     // Check for "Stay signed in?" prompt
-    const stayButton = page.locator('#idSIButton9, #idBtn_Back');
-    if (await stayButton.isVisible() && await page.textContent('body').then(text => 
+    const stayYesButton = page.locator('#idSIButton9');
+    if (await stayYesButton.isVisible() && await page.textContent('body').then(text => 
       text.includes('Stay signed in') || text.includes('remain signed in')
     )) {
-      console.log('[AUTH] Clicking "Stay signed in"...');
-      await stayButton.click();
+      console.log('[AUTH] Clicking "Yes" on Stay signed in...');
+      await stayYesButton.click();
       return;
     }
 
