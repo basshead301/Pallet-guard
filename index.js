@@ -53,6 +53,7 @@ async function authenticate() {
   } catch (error) {
     log(`❌ Authentication failed: ${error.message}`);
     scanStats.lastError = error.message;
+    scanStats.lastAuthScreenshot = error.screenshotPath || null;
     return false;
   }
 }
@@ -185,7 +186,7 @@ async function performScan() {
         log('💥 Re-auth failed — stopping scanner, starting auto-recovery');
         stopScanning();
         try {
-          await notifier.sendDownAlert('Re-authentication failed after token expiry — auto-recovery started');
+          await notifier.sendDownAlert('Re-authentication failed after token expiry — auto-recovery started', scanStats.lastAuthScreenshot);
           log('📧 Down alert email sent');
         } catch (e) {
           log(`⚠️ Down alert email failed: ${e.message}`);
@@ -432,7 +433,7 @@ async function main() {
   } else {
     log('❌ Initial authentication failed — starting auto-recovery');
     try {
-      await notifier.sendDownAlert('Initial authentication failed on service startup — auto-recovery started');
+      await notifier.sendDownAlert('Initial authentication failed on service startup — auto-recovery started', scanStats.lastAuthScreenshot);
       log('📧 Down alert email sent');
     } catch (e) {
       log(`⚠️ Down alert email failed: ${e.message}`);

@@ -11,9 +11,15 @@
  */
 
 const { chromium } = require('playwright');
+const path = require('path');
+const fs = require('fs');
 
 const APEX_LOGIN_URL = 'https://apex.capstonelogistics.com/home';
 const LOAD_ENTRY_URL = 'https://apexloadentry.capstonelogistics.com/';
+const SCREENSHOT_DIR = path.join(__dirname, '..', 'screenshots');
+
+// Ensure screenshot dir exists
+if (!fs.existsSync(SCREENSHOT_DIR)) fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
 let browserContext = null;
 
@@ -25,6 +31,19 @@ async function getBrowserContext() {
     });
   }
   return browserContext;
+}
+
+async function screenshotOnFail(page, label) {
+  try {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const filePath = path.join(SCREENSHOT_DIR, `${label}-${ts}.png`);
+    await page.screenshot({ path: filePath, fullPage: true });
+    console.log(`[AUTH] 📸 Failure screenshot saved: ${filePath}`);
+    return filePath;
+  } catch (e) {
+    console.log(`[AUTH] ⚠️ Failed to take screenshot: ${e.message}`);
+    return null;
+  }
 }
 
 async function getApexToken() {
@@ -64,12 +83,21 @@ async function getApexToken() {
     }
     
     if (!tokenCookie || !tokenCookie.value) {
-      throw new Error('Apex Token cookie not found after 30s - login may have failed');
+      const ssPath = await screenshotOnFail(page, 'apex-auth');
+      const err = new Error('Apex Token cookie not found after 30s - login may have failed');
+      err.screenshotPath = ssPath;
+      throw err;
     }
 
     console.log(`[AUTH] ✓ Apex Token acquired (${tokenCookie.value.substring(0, 20)}...)`);
     return tokenCookie.value;
 
+  } catch (error) {
+    if (!error.screenshotPath) {
+      const ssPath = await screenshotOnFail(page, 'apex-auth');
+      error.screenshotPath = ssPath;
+    }
+    throw error;
   } finally {
     await page.close();
   }
@@ -117,8 +145,17 @@ async function getLoadEntryToken() {
       attempts++;
     }
 
-    throw new Error('Load Entry authentication timed out');
+    const ssPath = await screenshotOnFail(page, 'loadentry-auth');
+    const err = new Error('Load Entry authentication timed out');
+    err.screenshotPath = ssPath;
+    throw err;
 
+  } catch (error) {
+    if (!error.screenshotPath) {
+      const ssPath = await screenshotOnFail(page, 'loadentry-auth');
+      error.screenshotPath = ssPath;
+    }
+    throw error;
   } finally {
     await page.close();
   }

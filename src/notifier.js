@@ -54,8 +54,22 @@ async function sendEmail(action) {
   });
 }
 
-async function sendDownAlert(reason) {
+async function sendDownAlert(reason, screenshotPath) {
   const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const fs = require('fs');
+
+  const attachments = [];
+  if (screenshotPath && fs.existsSync(screenshotPath)) {
+    attachments.push({
+      filename: require('path').basename(screenshotPath),
+      path: screenshotPath,
+      cid: 'authfailure'
+    });
+  }
+
+  const screenshotHtml = attachments.length > 0
+    ? `<h3 style="margin-top: 20px;">Login Page at Time of Failure:</h3><img src="cid:authfailure" style="max-width: 100%; border: 1px solid #ddd; border-radius: 4px;" />`
+    : '';
 
   await transporter.sendMail({
     from: `"Pallet Guard" <${process.env.GMAIL_ADDRESS}>`,
@@ -70,11 +84,13 @@ async function sendDownAlert(reason) {
         <p style="font-size: 14px;"><strong>Time:</strong> ${ts}</p>
         <p style="margin-top: 16px; padding: 12px; background: #fdf2f2; border-left: 4px solid #c0392b; font-size: 13px;">
           The Pallet Guard scanner has stopped and is no longer monitoring POs. 
-          Visit the dashboard to re-authenticate and restart, or the service will attempt to restart automatically.
+          Auto-recovery is active and will keep retrying.
         </p>
+        ${screenshotHtml}
         <p style="font-size: 11px; color: #999; margin-top: 24px;">Sent by Pallet Guard • Automated monitoring</p>
       </div>
-    `
+    `,
+    attachments
   });
 }
 
