@@ -1,0 +1,21 @@
+{
+  "name": "pallet-guard-headless",
+  "version": "1.0.0",
+  "description": "Headless Pallet Guard service for AWS deployment - monitors Capstone Apex POs and auto-cancels driver wallet payments",
+  "main": "index.js",
+  "author": "Capstone Logistics - DC7 Greencastle",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "install-browser": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.49.1",
+    "nodemailer": "^6.9.16",
+    "express": "^4.21.2",
+    "dotenv": "^16.4.7"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
