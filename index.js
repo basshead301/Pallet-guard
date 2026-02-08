@@ -115,6 +115,7 @@ async function performScan() {
     }
 
     scanStats.successfulScans++;
+    scanStats.consecutiveErrors = 0;
     log(`✅ Scan cycle complete: ${result.poData.length} POs, ${result.actions.length} actions taken`);
     return true;
 
@@ -135,11 +136,28 @@ async function performScan() {
       } else {
         log('💥 Re-auth failed — stopping scanner');
         stopScanning();
+        try {
+          await notifier.sendDownAlert('Re-authentication failed after token expiry');
+          log('📧 Down alert email sent');
+        } catch (e) {
+          log(`⚠️ Down alert email failed: ${e.message}`);
+        }
         return false;
       }
     } else {
       log(`❌ Scan error: ${msg}`);
       scanStats.lastError = msg;
+      scanStats.consecutiveErrors = (scanStats.consecutiveErrors || 0) + 1;
+      if (scanStats.consecutiveErrors >= 5) {
+        log('💥 5 consecutive scan errors — stopping scanner');
+        stopScanning();
+        try {
+          await notifier.sendDownAlert(`5 consecutive scan errors. Last error: ${msg}`);
+          log('📧 Down alert email sent');
+        } catch (e) {
+          log(`⚠️ Down alert email failed: ${e.message}`);
+        }
+      }
       return false;
     }
   }
@@ -360,6 +378,12 @@ async function main() {
     startScanning();
   } else {
     log('❌ Initial authentication failed - use web dashboard to retry');
+    try {
+      await notifier.sendDownAlert('Initial authentication failed on service startup');
+      log('📧 Down alert email sent');
+    } catch (e) {
+      log(`⚠️ Down alert email failed: ${e.message}`);
+    }
   }
 }
 

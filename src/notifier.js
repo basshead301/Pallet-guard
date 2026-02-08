@@ -54,4 +54,28 @@ async function sendEmail(action) {
   });
 }
 
-module.exports = { sendEmail };
+async function sendDownAlert(reason) {
+  const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+
+  await transporter.sendMail({
+    from: `"Pallet Guard" <${process.env.GMAIL_ADDRESS}>`,
+    to: process.env.NOTIFY_EMAIL,
+    subject: `🚨 Pallet Guard: Scanner DOWN`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto;">
+        <h2 style="color: #c0392b; border-bottom: 2px solid #c0392b; padding-bottom: 8px;">
+          🚨 Pallet Guard — Scanner Stopped
+        </h2>
+        <p style="font-size: 14px;"><strong>Reason:</strong> ${reason}</p>
+        <p style="font-size: 14px;"><strong>Time:</strong> ${ts}</p>
+        <p style="margin-top: 16px; padding: 12px; background: #fdf2f2; border-left: 4px solid #c0392b; font-size: 13px;">
+          The Pallet Guard scanner has stopped and is no longer monitoring POs. 
+          Visit the dashboard to re-authenticate and restart, or the service will attempt to restart automatically.
+        </p>
+        <p style="font-size: 11px; color: #999; margin-top: 24px;">Sent by Pallet Guard • Automated monitoring</p>
+      </div>
+    `
+  });
+}
+
+module.exports = { sendEmail, sendDownAlert };
