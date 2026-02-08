@@ -57,10 +57,58 @@ async function authenticate() {
   }
 }
 
+// Auto-recovery: retry auth with exponential backoff when scanner dies
+let recoveryTimer = null;
+const RECOVERY_DELAYS = [30, 60, 120, 300, 600]; // seconds: 30s, 1m, 2m, 5m, 10m then stay at 10m
+
+async function startAutoRecovery(reason) {
+  if (recoveryTimer) return; // already recovering
+  let attempt = 0;
+
+  async function tryRecover() {
+    attempt++;
+    const delaySec = RECOVERY_DELAYS[Math.min(attempt - 1, RECOVERY_DELAYS.length - 1)];
+    log(`🔄 Auto-recovery attempt ${attempt} in ${delaySec}s (reason: ${reason})`);
+
+    recoveryTimer = setTimeout(async () => {
+      recoveryTimer = null;
+      log(`🔄 Auto-recovery attempt ${attempt} — re-authenticating...`);
+
+      // Close stale browser context before retrying
+      try { await auth.closeBrowser(); } catch (e) { /* ignore */ }
+
+      const success = await authenticate();
+      if (success) {
+        log('✅ Auto-recovery succeeded — restarting scanner');
+        scanStats.consecutiveErrors = 0;
+        startScanning();
+        try {
+          await notifier.sendDownAlert(`Auto-recovery succeeded after ${attempt} attempt(s). Scanner back online.`);
+        } catch (e) { /* best effort */ }
+      } else {
+        log(`❌ Auto-recovery attempt ${attempt} failed — will retry`);
+        await tryRecover();
+      }
+    }, delaySec * 1000);
+  }
+
+  await tryRecover();
+}
+
+function cancelAutoRecovery() {
+  if (recoveryTimer) {
+    clearTimeout(recoveryTimer);
+    recoveryTimer = null;
+  }
+}
+
 // Re-authentication on 401
 async function reauth(which) {
   log(`🔄 ${which} token expired — re-authenticating...`);
   
+  // Close stale browser context before retrying
+  try { await auth.closeBrowser(); } catch (e) { /* ignore */ }
+
   try {
     if (which === 'Apex' || which === 'both') {
       apexToken = await auth.getApexToken();
@@ -134,14 +182,15 @@ async function performScan() {
         log('🔄 Re-auth succeeded — will retry on next cycle');
         return false; // Don't count as failed scan
       } else {
-        log('💥 Re-auth failed — stopping scanner');
+        log('💥 Re-auth failed — stopping scanner, starting auto-recovery');
         stopScanning();
         try {
-          await notifier.sendDownAlert('Re-authentication failed after token expiry');
+          await notifier.sendDownAlert('Re-authentication failed after token expiry — auto-recovery started');
           log('📧 Down alert email sent');
         } catch (e) {
           log(`⚠️ Down alert email failed: ${e.message}`);
         }
+        startAutoRecovery('re-auth failed after 401');
         return false;
       }
     } else {
@@ -149,14 +198,15 @@ async function performScan() {
       scanStats.lastError = msg;
       scanStats.consecutiveErrors = (scanStats.consecutiveErrors || 0) + 1;
       if (scanStats.consecutiveErrors >= 5) {
-        log('💥 5 consecutive scan errors — stopping scanner');
+        log('💥 5 consecutive scan errors — stopping scanner, starting auto-recovery');
         stopScanning();
         try {
-          await notifier.sendDownAlert(`5 consecutive scan errors. Last error: ${msg}`);
+          await notifier.sendDownAlert(`5 consecutive scan errors. Last error: ${msg} — auto-recovery started`);
           log('📧 Down alert email sent');
         } catch (e) {
           log(`⚠️ Down alert email failed: ${e.message}`);
         }
+        startAutoRecovery(`5 consecutive errors: ${msg}`);
       }
       return false;
     }
@@ -169,6 +219,7 @@ function startScanning() {
     log('⚠️ Scanner already running');
     return false;
   }
+  cancelAutoRecovery();
 
   log('🚀 Starting scanner — monitoring subdepts 85 & 86 every 10 seconds');
   isScanning = true;
@@ -341,6 +392,7 @@ app.get('/', (req, res) => {
 process.on('SIGINT', async () => {
   log('🛑 Received SIGINT - shutting down gracefully...');
   
+  cancelAutoRecovery();
   stopScanning();
   
   try {
@@ -356,6 +408,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   log('🛑 Received SIGTERM - shutting down gracefully...');
+  cancelAutoRecovery();
   stopScanning();
   await auth.closeBrowser();
   process.exit(0);
@@ -377,13 +430,14 @@ async function main() {
   if (authSuccess) {
     startScanning();
   } else {
-    log('❌ Initial authentication failed - use web dashboard to retry');
+    log('❌ Initial authentication failed — starting auto-recovery');
     try {
-      await notifier.sendDownAlert('Initial authentication failed on service startup');
+      await notifier.sendDownAlert('Initial authentication failed on service startup — auto-recovery started');
       log('📧 Down alert email sent');
     } catch (e) {
       log(`⚠️ Down alert email failed: ${e.message}`);
     }
+    startAutoRecovery('initial auth failed');
   }
 }
 
